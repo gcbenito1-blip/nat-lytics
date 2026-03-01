@@ -1,151 +1,124 @@
+import streamlit_shadcn_ui as ui
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, 
+                           f1_score, roc_auc_score, confusion_matrix,
+                           classification_report)
+from sklearn.tree import DecisionTreeClassifier
+from xgboost import XGBClassifier
+from tabs import tab1, tab2, tab3, tab4
+import warnings
+warnings.filterwarnings('ignore')
 
-# Set the title and favicon that appear in the Browser's tab bar.
+# Page configuration
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title="NAT-Lytics",
+    page_icon="assets/l2.png",
+    layout="centered",
+    initial_sidebar_state="auto",
+    menu_items={
+        'About': "A National Achievement Test Exploratory and Predictive Tool"
+    }
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# Custom CSS
+st.markdown("""
+    <style>
+    h1 a{
+        display:none; 
+    }
+    .main-header {
+        font-size: 2.5rem;
+        color: #1E88E5;
+        text-align: center;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #0D47A1;
+        margin-top: 1rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border: 1
+    }
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+    .card {
+    background-color: white; /* Background color */
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Shadow effect */
+    margin: 20px; /* Space around cards */
+    padding: 20px; /* Inner spacing */
+    transition: transform 0.2s; /* Animation effect */
+    }
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    .card:hover {
+        transform: scale(1.05); /* Scale up on hover */
+    }
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    .card-title {
+        font-size: 24px; /* Title font size */
+        color: #333; /* Title color */
+    }
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    .card-content {
+        font-size: 16px; /* Content font size */
+        color: #666; /* Content color */
+    }
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    .card-button {
+        background-color: #4CAF50; /* Button background */
+        border: none; /* No border */
+        color: white; /* Button text color */
+        padding: 10px 15px; /* Button padding */
+        text-align: center; /* Center alignment */
+        text-decoration: none; /* No underline */
+        display: inline-block; /* Inline-block for button */
+        margin-top: 10px; /* Space above button */
+        border-radius: 5px; /* Rounded corners for button */
+        cursor: pointer; /* Pointer on hover */
+    }
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    .card-button:hover {
+        background-color: #45a049; /* Darker green on hover */
+    }
 
-    return gdp_df
+    </style>
+""", unsafe_allow_html=True) 
 
-gdp_df = get_gdp_data()
+# Title
+st.header(":pencil2: NAT-Lytics Model Evaluation and Prediction Dashboard", anchor=False)
+st.markdown('National Achievement Test Analysis & Prediction System')
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+t1, t2, t3, t4= st.tabs([":material/upload: Upload Data", ":material/finance: Exploratory Data Analysis", ":material/search_insights: Model Evaluation", ":material/target: Prediction Results"])
+with st.sidebar:
+    st.sidebar.title(":rocket: Quick Start Guide")
+    with st.container(border=True, ):
+        st.markdown("""
+        1. Create a CSV file following the template.
+        1. Upload your own data.
+        1. Click 'Generate Results'
+        """, unsafe_allow_html=True)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+with t1:
+    tab1.render()
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+with t2:
+    tab2.render()
 
-# Add some spacing
-''
-''
+with t3:
+    tab3.render()
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+with t4:
+    tab4.render()
